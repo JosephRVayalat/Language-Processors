@@ -32,6 +32,9 @@ A' → b | ε
 B  → c c d | d d c
 
 6.Construct a Shift Reduce Parser for any given grammar.
+
 7. Generate three-address intermediate code for simple expressions.
+  
 8. Implement basic optimization techniques -constant folding.
+
 9.Implement the back end of the compiler which takes the three address code and produces the assembly language instructions.
