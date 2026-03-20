@@ -1,0 +1,5 @@
+FIRST      1000
+ALPHA      100F
+ONE        1015
+TWO        1017
+BETA       101A

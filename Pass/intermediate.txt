@@ -1,0 +1,15 @@
+LOCCTR     LABEL      OPCODE     OPERAND   
+-------------------------------------------------
+1000      COPY       START      1000      
+1000      FIRST      LDA        ALPHA     
+1003      -          ADD        ONE       
+1006      -          SUB        TWO       
+1009      -          STA        BETA      
+100C      -          RSUB       -         
+100F      ALPHA      BYTE       C'JOSEPH' 
+1015      ONE        RESB       2         
+1017      TWO        WORD       5         
+101A      BETA       RESW       1         
+101D      -          END        FIRST     
+
+Program Length = 0020
