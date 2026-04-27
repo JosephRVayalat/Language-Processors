@@ -1,181 +1,113 @@
+/*
+ * Pass 2 of Two-Pass Assembler
+ * Reads intermediate.txt + symtab.txt → prints object code (H, T, E records)
+ */
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 
-#define MAX 100
+/* Opcode table: mnemonic → machine code */
+#define OPTAB_SIZE 5
+char optab_mnem[OPTAB_SIZE][10] = {"LDA", "ADD", "SUB", "STA", "RSUB"};
+char optab_code[OPTAB_SIZE][10] = {"00",  "18",  "1C",  "0C",  "4C"};
 
-struct symtab {
-    char label[20];
-    int addr;
-} sym[MAX];
+int main()
+{
+    FILE *finter, *fsym;
+    char label[20], opcode[20], operand[20], progname[20];
+    int  loc, len, start;
+    int  j;
 
-struct optab {
-    char opcode[10];
-    char code[10];
-} opt[] = {
-    {"LDA","00"},
-    {"STA","0C"},
-    {"ADD","18"},
-    {"SUB","1C"},
-    {"RSUB","4C"}
-};
+    /* Symbol table */
+    char sym_label[20][20];
+    int  sym_addr[20];
+    int  sym_count = 0;
 
-int symcount = 0;
+    fsym   = fopen("symtab.txt",       "r");
+    finter = fopen("intermediate.txt", "r");
 
-/* Search SYMTAB */
-int searchSym(char *operand) {
-    for (int i = 0; i < symcount; i++) {
-        if (strcmp(sym[i].label, operand) == 0)
-            return sym[i].addr;
-    }
-    return -1;
-}
+    /* Load all symbols from symtab.txt */
+    while (fscanf(fsym, "%d %s %x", &j, sym_label[sym_count], &sym_addr[sym_count]) != EOF)
+        sym_count++;
 
-/* Search OPTAB */
-int searchOp(char *opcode) {
-    for (int i = 0; i < 5; i++) {
-        if (strcmp(opt[i].opcode, opcode) == 0)
-            return i;
-    }
-    return -1;
-}
+    /* Read first line of intermediate */
+    fscanf(finter, "%x %d %s %s %s", &loc, &len, label, opcode, operand);
 
-int main() {
-
-    FILE *symf, *inter, *out;
-
-    char line[100];
-    char label[20], opcode[20], operand[20];
-    int locctr, start = 0;
-
-    char objcode[50];
-    char text[500] = "";
-
-    int text_len = 0, text_start = 0;
-
-    symf = fopen("SYMTAB.txt", "r");
-    inter = fopen("intermediate.txt", "r");
-    out = fopen("output.txt", "w");
-
-    if (!symf || !inter || !out) {
-        printf("File error\n");
-        return 1;
+    if (strcmp(opcode, "START") == 0)
+    {
+        start = strtol(operand, NULL, 16);
+        strcpy(progname, label);
+        fscanf(finter, "%x %d %s %s %s", &loc, &len, label, opcode, operand);
     }
 
-    /* 🔹 Load SYMTAB */
-while (fgets(line, sizeof(line), symf)) {
+    /* Buffer T record content so we can compute length before printing */
+    char tbuf[512] = "";
+    char tmp[64];
+    int  text_bytes = 0;
 
-    if (strlen(line) < 3) continue;  // skip empty lines
-
-    if (sscanf(line, "%s %x", sym[symcount].label, &sym[symcount].addr) == 2) {
-        symcount++;
-    }
-}
-    /* 🔹 Skip header lines */
-    fgets(line, sizeof(line), inter);
-    fgets(line, sizeof(line), inter);
-
-    /* 🔹 Read first actual line */
-    fgets(line, sizeof(line), inter);
-    sscanf(line, "%x %s %s %s", &locctr, label, opcode, operand);
-
-    if (strcmp(opcode, "START") == 0) {
-        start = locctr;
-        printf("H^%s^%06X\n", label, start);
-        fprintf(out, "H^%s^%06X\n", label, start);
-    }
-
-    text_start = start;
-
-    /* 🔹 Process rest of lines */
-    while (fgets(line, sizeof(line), inter)) {
-
-        /* Stop before program length line */
-        if (strncmp(line, "Program Length", 14) == 0)
-            break;
-
-        if (sscanf(line, "%x %s %s %s", &locctr, label, opcode, operand) != 4)
-            continue;
-
-        if (strcmp(opcode, "END") == 0)
-            break;
-
-        objcode[0] = '\0';
-
-        int opIndex = searchOp(opcode);
-
-        /* Machine Instructions */
-        if (opIndex != -1) {
-
-            if (strcmp(opcode, "RSUB") == 0) {
-                strcpy(objcode, "4C0000");
-            } else {
-                int addr = searchSym(operand);
-                if (addr == -1) addr = 0;
-
-                sprintf(objcode, "%s%04X", opt[opIndex].code, addr);
-            }
-        }
-
-        /* WORD */
-        else if (strcmp(opcode, "WORD") == 0) {
-            sprintf(objcode, "%06X", atoi(operand));
-        }
-
-        /* BYTE */
-        else if (strcmp(opcode, "BYTE") == 0) {
-
-            if (operand[0] == 'C') {
-                int len = strlen(operand);
-                for (int i = 2; i < len - 1; i++) {
-                    char temp[5];
-                    sprintf(temp, "%02X", operand[i]);
-                    strcat(objcode, temp);
+    /* Process each line until END */
+    while (strcmp(opcode, "END") != 0)
+    {
+        /* Look up opcode in optab */
+        for (int i = 0; i < OPTAB_SIZE; i++)
+        {
+            if (strcmp(opcode, optab_mnem[i]) == 0)
+            {
+                /* Find operand address in symbol table */
+                int address = 0;
+                for (j = 0; j < sym_count; j++)
+                {
+                    if (strcmp(sym_label[j], operand) == 0)
+                    {
+                        address = sym_addr[j];
+                        break;
+                    }
                 }
-            }
-            else if (operand[0] == 'X') {
-                strncpy(objcode, operand + 2, strlen(operand) - 3);
-                objcode[strlen(operand) - 3] = '\0';
+                sprintf(tmp, "%s%04X^", optab_code[i], address);
+                strcat(tbuf, tmp);
+                text_bytes += 3;
+                break;
             }
         }
 
-        /* RESW / RESB → break text record */
-        else if (strcmp(opcode, "RESW") == 0 || strcmp(opcode, "RESB") == 0) {
-
-            if (text_len > 0) {
-                printf("T^%06X^%02X^%s\n", text_start, text_len, text);
-                fprintf(out, "T^%06X^%02X^%s\n", text_start, text_len, text);
+        /* BYTE directive: print hex of each character */
+        if (strcmp(opcode, "BYTE") == 0)
+        {
+            for (int i = 2; i < strlen(operand) - 1; i++)
+            {
+                sprintf(tmp, "%02X", operand[i]);
+                strcat(tbuf, tmp);
+                text_bytes++;
             }
-
-            text[0] = '\0';
-            text_len = 0;
-            continue;
+            strcat(tbuf, "^");
         }
 
-        /* Add to text record */
-        if (strlen(objcode) > 0) {
-
-            if (text_len == 0)
-                text_start = locctr;
-
-            strcat(text, objcode);
-            text_len += strlen(objcode) / 2;
+        /* WORD directive: print 6-digit hex value */
+        if (strcmp(opcode, "WORD") == 0)
+        {
+            sprintf(tmp, "%06X^", atoi(operand)); //atoi important
+            strcat(tbuf, tmp);
+            text_bytes += 3;
         }
+
+        fscanf(finter, "%x %d %s %s %s", &loc, &len, label, opcode, operand);
     }
 
-    /* Flush remaining text record */
-    if (text_len > 0) {
-        printf("T^%06X^%02X^%s\n", text_start, text_len, text);
-        fprintf(out, "T^%06X^%02X^%s\n", text_start, text_len, text);
-    }
+    /* Now loc holds the END address, so program length = loc - start */
+    int prog_len = loc - start;
+
+    /* Header record */
+    printf("H^%s^%06X^%06X\n", progname, start, prog_len);
+
+    /* Text record with computed length */
+    printf("T^%06X^%02X^%s\n", start, text_bytes, tbuf);
 
     /* End record */
     printf("E^%06X\n", start);
-    fprintf(out, "E^%06X\n", start);
 
-    fclose(symf);
-    fclose(inter);
-    fclose(out);
+    fclose(finter);
+    fclose(fsym);
 
     return 0;
 }
